@@ -1,0 +1,32 @@
+{
+  "name": "open-haxball-backend",
+  "version": "0.1.0",
+  "description": "node.js backend project of open-haxball.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "build": "gulp backend"
+  },
+  "author": "wxyz-abcd",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "geoip-lite": "^1.4.7",
+    "gulp": "^4.0.2",
+    "gulp-concat": "^2.6.1",
+    "gulp-uglify": "^3.0.2",
+    "pako": "^2.1.0",
+    "request-ip": "^3.3.0",
+    "ws": "^8.12.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.21.0",
+    "@babel/preset-env": "^7.20.2",
+    "babelify": "^10.0.0",
+    "browserify": "^17.0.0",
+    "gulp-babel": "^8.0.0",
+    "gulp-delete-file": "^1.0.2",
+    "vinyl-buffer": "^1.0.1",
+    "vinyl-source-stream": "^2.0.0"
+  }
+}
