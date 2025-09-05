@@ -182,50 +182,9 @@ function onload(){
   gameTime_m2 = gameTime.children.item(2);
   gameTime_s1 = gameTime.children.item(4);
   gameTime_s2 = gameTime.children.item(5);
-  API = abcHaxballAPI({
-    setTimeout: window.setTimeout,
-    clearTimeout: window.clearTimeout,
-    setInterval: window.setInterval,
-    clearInterval: window.clearInterval,
-    console: window.console,
-    requestAnimationFrame: window.requestAnimationFrame,
-    cancelAnimationFrame: window.cancelAnimationFrame,
-    RTCPeerConnection: window.RTCPeerConnection, 
-    RTCIceCandidate: window.RTCIceCandidate, 
-    RTCSessionDescription: window.RTCSessionDescription, 
-    crypto: window.crypto,
-    WebSocket: window.WebSocket,
-    XMLHttpRequest: window.XMLHttpRequest,
-    performance: window.performance,
-    JSON5: window.JSON5,
-    pako: window.pako
-  },{
-    noVariableValueChangeEvent: true,
-    /*
-    backend: { // this is basro's current backend server
-      hostname: "www.haxball.com",
-      hostnameWs: "p2p.haxball.com",
-      secure: true
-    },
-    proxy: { // this is my proxy server
-      WebSocketChangeOriginAllowed: false,
-      WebSocketUrl: "wss://node-haxball.glitch.me/",
-      HttpUrl: "https://node-haxball.glitch.me/rs/"
-    }
-    */
-    /*
-    proxy: { // this is how i can use my own proxy server locally
-      WebSocketChangeOriginAllowed: false,
-      WebSocketUrl: "ws://localhost:3000/",
-      HttpUrl: "http://localhost:3000/rs/"
-    },
-    */
-    backend: { // this is how i can use my backend server locally
-      hostname: "localhost:3000",
-      hostnameWs: "localhost:3000",
-      secure: false
-    }
-  }); // if you use our haxballOriginModifier extension, you don't need a proxy server. (But you still have to serve the files, you cannot open the html directly.)
+  API = abcHaxballAPI(window, {
+    noVariableValueChangeEvent: true
+  });
   sound = new Sound();
   canvas.addEventListener("wheel", (event)=>renderer.onWheel(event));
   Promise.all([sound.loadSound("./sounds/chat.ogg"), sound.loadSound("./sounds/crowd.ogg"), sound.loadSound("./sounds/goal.ogg"), sound.loadSound("./sounds/highlight.wav"), sound.loadSound("./sounds/join.ogg"), sound.loadSound("./sounds/kick.ogg"), sound.loadSound("./sounds/leave.ogg")]).then((sounds)=>{
@@ -242,7 +201,7 @@ function onload(){
   });
 
   var tb = document.getElementById("timeBar"), tbh = document.getElementById("timeBarHandle"), dragging = false, spos = 0;
-  var sp = document.getElementById("speed");
+  var sp = document.getElementById("speed"), ext = document.getElementById("extrapolation");
   window.onpointerdown = function(e){
     if (e.target==tbh || e.target.parentElement==tbh)
       dragging = true;
@@ -289,6 +248,12 @@ function onload(){
       return;
     speed = val;
     replayReader.setSpeed(speed);
+  };
+  ext.onchange = function(e){
+    var val = parseFloat(e.target.value);
+    if (!isFinite(val) || isNaN(val))
+      return;
+    renderer.extrapolation = val;
   };
   btStart.onclick = function(){
     if (!replayReader)
@@ -369,9 +334,9 @@ function onload(){
         onPlayerBallKick: ()=>{
           sound.playSound(sound.kick);
         },
-        onTeamGoal: (teamId)=>{
+        onTeamGoal: (teamId, goalId, goal, ballDiscId, ballDisc)=>{
           sound.playSound(sound.goal);
-          renderer.onTeamGoal(teamId);
+          renderer.onTeamGoal(teamId, goalId, goal, ballDiscId, ballDisc);
         },
         onTimeIsUp: ()=>{
           renderer.onTimeIsUp();
@@ -457,6 +422,7 @@ function onload(){
           renderer.room = replayReader;
           renderer.initialize(replayReader);
           //replayReader.setSpeed(1.0);
+          updateGUI();
         }
       };
       document.getElementById("load").onclick = function(){

@@ -1,5 +1,5 @@
 // version check missing
-const { refreshRoomsIntervalMsec, roomRemovalThresholdMsec, version, wsUrl, rcrSiteKey } = require("./consts");
+const { refreshRoomsIntervalMsec, roomRemovalThresholdMsec, version, hostname, secure, defaultPort, rcrSiteKey } = require("./consts");
 const geoip = require("geoip-lite");
 const pako = require("pako");
 const { RoomData, ClientRoomData } = require("./data/RoomData");
@@ -11,13 +11,14 @@ const getIp = require("./getIp");
 const tokens = [];
 const rooms = [];
 const clientSockets = new Map();
-var lastRoomsData = null, clientIdCounter = 0;
+var lastRoomsData = null, clientIdCounter = 1; // clientIdCounter should never be 2000000000.
 
 // **********************
 // for testing purposes: 
 // **********************
 
 tokens.push({ "isHost": true, "roomId": "AUvPASnCRzCkc4EtC3GIEg", "hostToken": "thr1.QMzOsbPS9VwJ0b83VIEpABjlHtT.WlGkS9xhN0bgoMIM", "clientToken": false, "creationTime": 10649.647399902344 });
+tokens.push({ "isHost": true, "roomId": "ZzZzZzZzZzZzZzZzZzZzZz", "hostToken": "thr1.ZzZzZzZzZzZzZzZzZzZzZzZzZzZ.zZzZzZzZzZzZzZzZ", "clientToken": false, "creationTime": 57124.246799843232 });
 //for (var i=0;i<100;i++) rooms.push(new RoomData("123_abcd"+i, new ClientRoomData(version, "test_.._"+i, "tr", 40, 38.5, false, 12, 1)));
 
 // **********************
@@ -66,7 +67,7 @@ function sendTokenResponse(res, tokenObj, isHost, tokenRequired = true){
     data: { 
       sitekey: rcrSiteKey,
       action: (!tokenRequired || tokenObj) ? "connect" : "recaptcha",
-      url: (!tokenRequired || tokenObj) ? wsUrl : "", // ???
+      url: (!tokenRequired || tokenObj) ? ((secure?"wss":"ws")+"://"+hostname+":"+defaultPort) : "", // ???
       token: tkn
     }
   });
@@ -151,17 +152,28 @@ function createClientIceCandidateMessage(clientId, candidateInfo){ // reader: Ph
   return writer.toArrayBuffer();
 }
 
-function HostPlayer(socket, ip, token){
+function HostPlayer(socket, ip, sessionDataPromise, token){
   var tokenData = validateToken(token, true), room = null;
   console.log(tokenData);
-  socket.on("open", () => {
-    if (!tokenData){
-      console.log("token data error");
-      socket.close(1001);
+  //socket.on("open", ()=>{
+  if (!tokenData){
+    console.log("token data error");
+    socket.close(1001);
+    return;
+  }
+  sessionDataPromise?.then((data)=>{
+    //socket.userData = data;
+    if (!data || !socket)
       return;
-    }
-    console.log("host socket opened");
+    var w = StreamWriter.create(10000, false);
+    w.writeUint8(111);
+    w.writeUint32(2000000000);
+    w.writeJSON(data);
+    socket.send(w.toUint8Array(), { binary: true });
+  })?.catch((ex)=>{
+    console.log(ex);
   });
+  //});
 
   socket.on("message", (data, binary) => {
     var reader = new StreamReader(new DataView(data), false);
@@ -203,10 +215,9 @@ function HostPlayer(socket, ip, token){
       }
       case 1:{
         var clientId = reader.readUint32();
-        if (reader.offset==data.byteLength){
-          // ????
+        if (reader.offset==data.byteLength) // ???? localhost?
           break;
-        }
+
         var reader2 = new StreamReader(new DataView(pako.inflateRaw(reader.readUint8Array()).buffer), false);
         var sdp = reader2.readString();
         var candidateArray = reader2.readJSON();
@@ -237,7 +248,10 @@ function HostPlayer(socket, ip, token){
           var _room = rooms.find((x)=>x.id==tokenData.roomId);
           if (_room){
             _room.clientData = clientRoomData;
-            _room.hostSocket = socket;
+            if (_room.hostSocket!=socket){
+              _room.hostSocket?.close?.();
+              _room.hostSocket = socket;
+            }
           }
           else{
             _room = new RoomData(tokenData.roomId, clientRoomData, socket);
@@ -283,15 +297,33 @@ function HostPlayer(socket, ip, token){
   });
 }
 
-function ClientPlayer(socket, ip, id, token){
+function ClientPlayer(socket, ip, sessionDataPromise, id, token){
   var room = rooms.find((x)=>x.id==id);
+  if (clientIdCounter==4294967296)
+    clientIdCounter=1;
+  else if (clientIdCounter==2000000000)
+    clientIdCounter++;
   var clientId = clientIdCounter++;
+  console.log("clientId: ", clientId);
 
   if (!room){
     console.log("room id error");
     socket.close(1001);
     return;
   }
+
+  sessionDataPromise?.then((data)=>{
+    if (!socket || !data/* || !room?.hostSocket?.userData*/)
+      return;
+    //socket.userData = data;
+    var w = StreamWriter.create(10000, false);
+    w.writeUint8(111);
+    w.writeUint32(clientId);
+    w.writeJSON(data);
+    room.hostSocket.send(w.toUint8Array(), { binary: true });
+  })?.catch((ex)=>{
+    console.log(ex);
+  });
 
   if (room.recaptchaEnabled){
     var tokenData = validateToken(token, false);

@@ -350,7 +350,7 @@ function initToolbars(){
     API.Utils.getDefaultStadiums().forEach((stadium)=>{
       addContextMenuItem(ctxMenu, stadium.name, true, ()=>{
         room.stopGame(0);
-        room.setCurrentStadium(stadium, 0, console.warn);
+        room.setCurrentStadium(stadium, 0);
         room.startGame(0);
       });
     });
@@ -364,11 +364,14 @@ function initToolbars(){
           return;
         var fr = new FileReader();
         fr.onload = function () {
-          var x = API.Utils.parseStadium(fr.result, console.warn);
+          var x;
+          try{
+            x = API.Utils.parseStadium(fr.result);
+          }catch(e){}
           if (!x)
             return;
           room.stopGame(0);
-          room.setCurrentStadium(x, 0, console.warn);
+          room.setCurrentStadium(x, 0);
           room.startGame(0);
         };
         fr.readAsText(f.item(0));
@@ -733,7 +736,7 @@ function initSnapshots(){
       id: snapshotIdCounter++,
       playMode: ePlayMode.checked,
       roomState: room.takeSnapshot(),
-      renderState: renderer.getState(),
+      renderState: renderer.takeSnapshot(),
       name: new Date().toLocaleString(),
       image: canvas.toDataURL()
     });
@@ -753,7 +756,7 @@ function initSnapshots(){
     var snapshot = snapshotArray[idx];
     room.useSnapshot(snapshot.roomState);
     ePlayMode.checked = snapshot.playMode;
-    renderer.setState(snapshot.renderState);
+    renderer.useSnapshot(snapshot.renderState);
     setControlledPlayerId(renderer.followPlayerId);
     updateGUI();
   };
@@ -3765,7 +3768,7 @@ function RemoveSpawnPointTool(){
     zoomPan_onMouseMove(event);
     var threshold = renderer.transformPixelDistanceToMapDistance(15);
     [highlightedSpawnPointIndex, highlightedSpawnPointTeam] = Query.getSpawnPointIndexAtMapCoord(room.state, thisTool.movedMapCoord, threshold);
-    var arr = (highlightedSpawnPointTeam==1) ? room.gameState.stadiumstadium.redSpawnPoints : room.gameState.stadium.blueSpawnPoints;
+    var arr = (highlightedSpawnPointTeam==1) ? room.gameState.stadium.redSpawnPoints : room.gameState.stadium.blueSpawnPoints;
     highlightedSpawnPointPos = arr[highlightedSpawnPointIndex];
   }
   
@@ -4726,50 +4729,9 @@ function onload(){
   toolDialog = makeDialog("Tool Properties");
   document.body.appendChild(toolDialog.element);
   initToolbars();
-  const API = abcHaxballAPI({
-    setTimeout: window.setTimeout,
-    clearTimeout: window.clearTimeout,
-    setInterval: window.setInterval,
-    clearInterval: window.clearInterval,
-    console: window.console,
-    requestAnimationFrame: window.requestAnimationFrame,
-    cancelAnimationFrame: window.cancelAnimationFrame,
-    RTCPeerConnection: window.RTCPeerConnection, 
-    RTCIceCandidate: window.RTCIceCandidate, 
-    RTCSessionDescription: window.RTCSessionDescription, 
-    crypto: window.crypto,
-    WebSocket: window.WebSocket,
-    XMLHttpRequest: window.XMLHttpRequest,
-    performance: window.performance,
-    JSON5: window.JSON5,
-    pako: window.pako
-  },{
-    noVariableValueChangeEvent: true,
-    /*
-    backend: { // this is basro's current backend server
-      hostname: "www.haxball.com",
-      hostnameWs: "p2p.haxball.com",
-      secure: true
-    },
-    proxy: { // this is my proxy server
-      WebSocketChangeOriginAllowed: false,
-      WebSocketUrl: "wss://node-haxball.glitch.me/",
-      HttpUrl: "https://node-haxball.glitch.me/rs/"
-    }
-    */
-    /*
-    proxy: { // this is how i can use my own proxy server locally
-      WebSocketChangeOriginAllowed: false,
-      WebSocketUrl: "ws://localhost:3000/",
-      HttpUrl: "http://localhost:3000/rs/"
-    },
-    */
-    backend: { // this is how i can use my backend server locally
-      hostname: "localhost:3000",
-      hostnameWs: "localhost:3000",
-      secure: false
-    }
-  }); // if you use our haxballOriginModifier extension, you don't need a proxy server. (But you still have to serve the files, you cannot open the html directly.)
+  API = abcHaxballAPI(window, {
+    noVariableValueChangeEvent: true
+  });
 
   initTools();
   var generalDialog = makeDialog("General");
@@ -4799,9 +4761,12 @@ function onload(){
     event.target.selectedIndex = 0;
   };
 
+  document.getElementById("extrapolation").onchange = function(event){
+    renderer.extrapolation = parseInt(event.target.value);
+  };
+
   keyHandler = new GameKeysHandler();
   sound = new Sound();
-  var { Team } = API.Impl.Core;
   document.addEventListener("keydown", window.onKeyDown);
   document.addEventListener("keyup", window.onKeyUp);
   document.addEventListener("focusout", keyHandler.reset);
@@ -4871,9 +4836,9 @@ function onload(){
         onPlayerBallKick: ()=>{
           sound.playSound(sound.kick);
         },
-        onTeamGoal: (teamId)=>{
+        onTeamGoal: (teamId, goalId, goal, ballDiscId, ballDisc)=>{
           sound.playSound(sound.goal);
-          renderer.onTeamGoal(teamId);
+          renderer.onTeamGoal(teamId, goalId, goal, ballDiscId, ballDisc);
         },
         onTimeIsUp: ()=>{
           renderer.onTimeIsUp();
@@ -5008,12 +4973,12 @@ function onload(){
       //room.librariesMap.aimbot.active = true;
       renderer.room = room;
       renderer.initialize();
+      initGameMenu();
+      initSnapshots();
       room.setTimeLimit(0, 0);
       room.setScoreLimit(0, 0);
       room.startGame(0);
       room.playerJoin(playerIdCounter++, "abc", "tr", "XX", "fakeIP", "fakeAuth");
-      initGameMenu();
-      initSnapshots();
     }, (err)=>{
       console.log(err);
       alert("Error loading images. Look at console for error details.");

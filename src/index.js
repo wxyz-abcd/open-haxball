@@ -1,11 +1,13 @@
-const { defaultPort, rcrSiteKey } = require("./consts");
+const { secure, defaultPort, rcrSiteKey } = require("./consts");
+const http = require("http");
+const https = require("https");
 const url = require("url");
 const express = require("express");
+const fs = require("fs");
 const ws = require("ws");
 const rsApi = require("./rs_api");
 const getIp = require("./getIp");
 const app = express();
-const port = process.env.PORT || defaultPort;
 
 app.use(express.query());
 app.use(express.urlencoded());
@@ -15,6 +17,8 @@ rsApi.init(app);
 app.use("/", (request, response, next)=>{
   console.log(request.url);
   var str = request.url;
+  if (str=="/")
+    request.url = str = "/roomList.html";
   var i2 = str.length;
   var i1 = str.indexOf(".");
   if (i1>=0){
@@ -51,25 +55,41 @@ app.get("/headlesstoken.html", (req, res)=>{
 </html>`);
 });
 
+function verifySession(identityToken){ // should return a promise that returns the user data for the given identity token. you should use the same identityToken while creating/joining a room with node-haxball.
+  return new Promise((resolve, reject)=>{
+    setTimeout(()=>{ // this timeout is just to simulate a database connection.
+      resolve({id: 0, name: "abc"}); // you may return any kind of json data related to the user here.
+    }, 50);
+  });
+}
+
 const wsServer = new ws.Server({ noServer: true });
-const server = app.listen(port);
-server.on("upgrade", (request, socket, head) => {
-  wsServer.handleUpgrade(request, socket, head, (socket) => {
+const server = secure ? https.createServer({
+  key: fs.readFileSync("./key.pem", "utf8"),
+  cert: fs.readFileSync("./cert.pem", "utf8")
+}, app) : http.createServer(app);
+
+server.on("upgrade", (request, socket, head)=>{
+  wsServer.handleUpgrade(request, socket, head, (socket)=>{
+    /*const data = request.headers["sec-websocket-protocol"];
+    const sessionDataPromise = data && verifySession(Buffer.from(data,"hex").toString("utf8"));*/
+    const sessionDataPromise = verifySession("");
     const clientIp = getIp(request);
-    console.log(request.url, clientIp);
     socket.binaryType = "arraybuffer";
     const { pathname, query } = url.parse(request.url, true);
     switch (pathname){
       case "/host": {
-        rsApi.handleHostWs(socket, clientIp, query.token);
+        rsApi.handleHostWs(socket, clientIp, sessionDataPromise, query.token);
         break;
       }
       case "/client": {
-        rsApi.handleClientWs(socket, clientIp, query.id, query.token);
+        rsApi.handleClientWs(socket, clientIp, sessionDataPromise, query.id, query.token);
         break;
       }
     }
   });
 });
 
-console.log("Server is running on port:", port);
+server.listen(defaultPort);
+
+console.log("Server is running on port:", defaultPort);

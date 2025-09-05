@@ -1,6 +1,7 @@
 const chatHistoryLimit = 500, gameStateGUIUpdateFrameInterval = 30;
-var roomFrame, canvasContainer, roomState, chatApi, room, API, keyHandler, sound, rendererParams, renderer;
+var roomFrame, canvasContainer, roomState, chatApi, room, API, keyHandler, sound, renderer, rendererParams;
 var gameTime, redScore, blueScore, gameTime_ot, gameTime_m1, gameTime_m2, gameTime_s1, gameTime_s2;
+const teamNames = ["Spectators", "Red Team", "Blue Team"];
 
 function loadImage(path){
   return new Promise((resolve, reject)=>{
@@ -161,7 +162,7 @@ function analyzeChatCommand(msg){
     return false;
   if (msg.length==1)
     return true;
-  var {K, q} = API.Impl.Utils;
+  var {parseHexInt} = API.Utils;
   msg = msg.substring(1).split(" ");
   switch (msg[0]) {
     case "avatar":
@@ -171,7 +172,7 @@ function analyzeChatCommand(msg){
       }
       break;
     case "checksum":
-      var cs = API.Utils.stadiumChecksum(room.stadium);
+      var cs = room.stadium.calculateChecksum();
       if (!cs)
         chatApi.receiveNotice('Current stadium is original: "' + room.stadium.name + '"')
       else
@@ -217,18 +218,16 @@ function analyzeChatCommand(msg){
         }
         else
           msg.splice(0, 3);
-        room.setTeamColors(teamId, angle, ...msg);
+        room.setTeamColors(teamId, angle, ...msg.map(c => parseHexInt("0x"+c)));
       } catch (g) {
-        msg = g instanceof q ? g.Ta : g;
-        if (msg.toString != null)
-          chatApi.receiveNotice(msg.toString());
+        chatApi.receiveNotice(msg.toString());
       }
       break;
     case "extrapolation":
       if (msg.length==2){
-        msg = K.parseInt(msg[1]);
+        msg = parseHexInt(msg[1]);
         if (msg!=null){ // && -200 <= msg && 200 >= msg
-          room.setExtrapolation(msg),
+          renderer.extrapolation = msg;
           chatApi.receiveNotice("Extrapolation set to " + msg + " msec");
         }
         else
@@ -239,7 +238,7 @@ function analyzeChatCommand(msg){
       break;
     case "handicap":
       if (msg.length==2){
-        msg = K.parseInt(msg[1]);
+        msg = parseHexInt(msg[1]);
         if (msg!=null){ // && 0 <= msg && 300 >= msg
           room.setHandicap(msg);
           chatApi.receiveNotice("Ping handicap set to " + msg + " msec");
@@ -254,8 +253,8 @@ function analyzeChatCommand(msg){
       if (msg.length<4)
         chatApi.receiveNotice("Usage: /kick_ratelimit <min> <rate> <burst>");
       else {
-        var d = K.parseInt(msg[1]), e = K.parseInt(msg[2]);
-        msg = K.parseInt(msg[3]);
+        var d = parseHexInt(msg[1]), e = parseHexInt(msg[2]);
+        msg = parseHexInt(msg[3]);
         if (d==null || e==null || msg==null)
           chatApi.receiveNotice("Invalid arguments");
         else
@@ -276,11 +275,13 @@ function analyzeChatCommand(msg){
                 e = true;
                 break;
               default:
-                throw new q(null);
+                throw null;
             }
             room.setRecaptcha(e);
             chatApi.receiveNotice("Room join Recaptcha " + (e ? "enabled" : "disabled"));
-          } else throw new q(null);
+          }
+          else
+            throw null;
         } catch (g) {
           chatApi.receiveNotice("Usage: /recaptcha <on|off>");
         }
@@ -523,7 +524,7 @@ window.onload = ()=>{
       sound.playSound(sound.goal);
     };
     room.onAfterGameEnd = function (winningTeamId, customData) {
-      chatApi.receiveNotice("" + Team.byId[winningTeamId].name + " team won the match");
+      chatApi.receiveNotice(teamNames[winningTeamId] + " won the match");
     };
     room.onAfterGamePauseChange = function (paused, byId, customData) {
       var byPlayerObj = roomState.players.find((x)=>x.id==byId);
@@ -548,7 +549,7 @@ window.onload = ()=>{
     };
     room.onAfterStadiumChange = function (stadium, byId, customData) {
       var byPlayerObj = roomState.players.find((x)=>x.id==byId);
-      var checksum = API.Utils.stadiumChecksum(stadium);
+      var checksum = stadium.calculateChecksum();
       if (checksum)
         chatApi.receiveNotice('Stadium "' + stadium.name + '" (' + checksum + ") loaded" + by(byPlayerObj));
       updateGUI();
@@ -558,9 +559,9 @@ window.onload = ()=>{
       chatApi.receiveNotice("[" + playerObj.id + "]" + playerObj.name + " " + (playerObj.sync ? "has desynchronized" : "is back in sync"));
     };
     room.onAfterPlayerTeamChange = function (id, teamId, byId, customData) {
-      var byPlayerObj = roomState.players.find((x)=>x.id==byId), playerObj = roomState.players.find((x)=>x.id==id), teamObj = Team.byId[teamId];
+      var byPlayerObj = roomState.players.find((x)=>x.id==byId), playerObj = roomState.players.find((x)=>x.id==id);
       if (roomState.gameState!=null)
-        chatApi.receiveNotice("[" + playerObj.id + "]" + playerObj.name + " was moved to " + teamObj.name + by(byPlayerObj));
+        chatApi.receiveNotice("[" + playerObj.id + "]" + playerObj.name + " was moved to " + teamNames[teamId] + by(byPlayerObj));
       updateGUI();
     };
     room.onAfterAutoTeams = function (playerId1, teamId1, playerId2, teamId2, byId, customData) {
@@ -591,6 +592,10 @@ window.onload = ()=>{
       updateGUI();
     };
     room.onAfterPingData = function (array, customData) {
+      updateGUI();
+    };
+    room.onIdentityEvent = function(id, data) {
+      console.log("identity event:", id, data);
       updateGUI();
     };
     Promise.all([sound.loadSound("./sounds/chat.ogg"), sound.loadSound("./sounds/crowd.ogg"), sound.loadSound("./sounds/goal.ogg"), sound.loadSound("./sounds/highlight.wav"), sound.loadSound("./sounds/join.ogg"), sound.loadSound("./sounds/kick.ogg"), sound.loadSound("./sounds/leave.ogg")]).then((sounds)=>{
@@ -626,7 +631,8 @@ window.onload = ()=>{
           }
         }
       };
-      room.setRenderer(new renderers.defaultRenderer(API, rendererParams));
+      renderer = new renderers.defaultRenderer(API, rendererParams);
+      room.setRenderer(renderer);
       if (room.librariesMap.aimbot)
         room.librariesMap.aimbot.active = !!_params.aimbot;
       updateGUI();

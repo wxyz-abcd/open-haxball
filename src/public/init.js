@@ -1,22 +1,5 @@
 function init(headless, roomCallback){
-  const API = abcHaxballAPI({
-    setTimeout: window.setTimeout,
-    clearTimeout: window.clearTimeout,
-    setInterval: window.setInterval,
-    clearInterval: window.clearInterval,
-    console: window.console,
-    requestAnimationFrame: window.requestAnimationFrame,
-    cancelAnimationFrame: window.cancelAnimationFrame,
-    RTCPeerConnection: window.RTCPeerConnection, 
-    RTCIceCandidate: window.RTCIceCandidate, 
-    RTCSessionDescription: window.RTCSessionDescription, 
-    crypto: window.crypto,
-    WebSocket: window.WebSocket,
-    XMLHttpRequest: window.XMLHttpRequest,
-    performance: window.performance,
-    JSON5: window.JSON5,
-    pako: window.pako
-  },{
+  const API = abcHaxballAPI(window,{
     noVariableValueChangeEvent: true,
     /*
     backend: { // this is basro's current backend server
@@ -38,9 +21,9 @@ function init(headless, roomCallback){
     },
     */
     backend: { // this is how i can use my backend server locally
-      hostname: "localhost:3000",
-      hostnameWs: "localhost:3000",
-      secure: false
+      hostname: window.location.host,
+      hostnameWs: window.location.host,
+      secure: window.location.protocol.indexOf("s")>0
     }
   }); // if you use our haxballOriginModifier extension, you don't need a proxy server. (But you still have to serve the files, you cannot open the html directly.)
 
@@ -81,18 +64,15 @@ function init(headless, roomCallback){
               lat: params.p_lat,
               lon: params.p_lon,
               flag: params.p_flag
-            },
-            extrapolation: 0
+            }
           }, 
           libraries: librariesArray,
           renderer: null,
           plugins: pluginsArray,
-          onSuccess: (room)=>{ roomCallback(room, params); },
-          onRequestRecaptcha: ()=>{
-            alert("Token rejected. Get a fresh token first!");
-            window.close();
+          onOpen: (room)=>{ 
+            roomCallback(room, params); 
           },
-          onLeave: ()=>{
+          onClose: ()=>{
             alert("The room has been closed.");
             window.close();
           }
@@ -110,7 +90,7 @@ function init(headless, roomCallback){
         else
           authPromise = Utils.authFromKey(params.p_ak);
         authPromise.then((x)=>{
-          var authObj, alerted = false;
+          var authObj;
           if (params.p_ak=="")
             [params.p_ak, authObj] = x;
           else
@@ -126,34 +106,18 @@ function init(headless, roomCallback){
               player_name: params.p_name,
               player_auth_key: params.p_ak,
               avatar: params.p_avatar,
-              //fps_limit: 0,
               geo: {
                 lat: params.p_lat,
                 lon: params.p_lon,
                 flag: params.p_flag
-              },
-              extrapolation: 0
+              }
             }, 
             libraries: librariesArray,
             renderer: null,
             plugins: pluginsArray,
-            onSuccess: (room)=>{ roomCallback(room, params); },
-            onRequestRecaptcha: ()=>{
-              alert("Token rejected. Get a fresh token first!");
-              window.close();
-            },
-            onFailure: (x)=>{
-              if (alerted)
-                return;
-              alerted = true;
-              alert(x.toString());
-              window.close();
-            },
-            onLeave: (x)=>{
-              if (alerted)
-                return;
-              alerted = true;
-              alert(x.toString());
+            onOpen: (room)=>{ roomCallback(room, params); },
+            onClose: (x)=>{
+              x && alert(x.toString());
               window.close();
             }
           });
@@ -187,8 +151,11 @@ function init(headless, roomCallback){
         params = readWatchStreamParameters(q);
         break;
       }
-      default:
-        throw "Unrecognized action, params:"+JSON.stringify(q);
+      default:{
+        console.log("Started with unrecognized parameters.");
+        window.API = API;
+        return;
+      }
     }
   }catch(ex){
     alert(ex);

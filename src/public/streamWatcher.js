@@ -3,6 +3,7 @@
 const chatHistoryLimit = 500, gameStateGUIUpdateFrameInterval = 30, scrollBarUpdateInterval = 200;
 var roomFrame, canvasContainer, roomState, chatApi, room, API, sound, rendererParams, renderer, sandboxParams, beginFrameNo, currentFrameNo, endFrameNo;
 var gameTime, redScore, blueScore, gameTime_ot, gameTime_m1, gameTime_m2, gameTime_s1, gameTime_s2, timeScroller;
+const teamNames = ["Spectators", "Red Team", "Blue Team"];
 
 function loadImage(path){
   return new Promise((resolve, reject)=>{
@@ -235,7 +236,7 @@ window.onload = ()=>{
         }
       };
       var renderer = new renderers.defaultRenderer(API, rendererParams);
-      var { Team } = API.Impl.Core, {F: Reader} = API.Impl.Stream;
+      var { Team } = API.Impl.Core, { Reader } = API.Impl.Stream;
       function by(playerObj){
         return (null == playerObj ? "" : " by [" + playerObj.id + "]" + playerObj.name);
       }
@@ -275,11 +276,11 @@ window.onload = ()=>{
         onPlayerBallKick: function (customData) {
           sound.playSound(sound.kick);
         },
-        onTeamGoal: function (teamId, customData) {
+        onTeamGoal: function (teamId, goalId, goal, ballDiscId, ballDisc, customData) {
           sound.playSound(sound.goal);
         },
         onGameEnd: function (winningTeamId, customData) {
-          chatApi.receiveNotice("" + Team.byId[winningTeamId].name + " team won the match");
+          chatApi.receiveNotice("" + teamNames[winningTeamId] + " team won the match");
         },
         onGamePauseChange: function (paused, byId, customData) {
           var byPlayerObj = roomState.players.find((x)=>x.id==byId);
@@ -304,7 +305,7 @@ window.onload = ()=>{
         },
         onStadiumChange: function (stadium, byId, customData) {
           var byPlayerObj = roomState.players.find((x)=>x.id==byId);
-          var checksum = API.Utils.stadiumChecksum(stadium);
+          var checksum = stadium.calculateChecksum();
           if (checksum)
             chatApi.receiveNotice('Stadium "' + stadium.name + '" (' + checksum + ") loaded" + by(byPlayerObj));
           updateGUI();
@@ -314,9 +315,9 @@ window.onload = ()=>{
           chatApi.receiveNotice("[" + playerObj.id + "]" + playerObj.name + " " + (playerObj.sync ? "has desynchronized" : "is back in sync"));
         },
         onPlayerTeamChange: function (id, teamId, byId, customData) {
-          var byPlayerObj = roomState.players.find((x)=>x.id==byId), playerObj = roomState.players.find((x)=>x.id==id), teamObj = Team.byId[teamId];
+          var byPlayerObj = roomState.players.find((x)=>x.id==byId), playerObj = roomState.players.find((x)=>x.id==id);
           if (roomState.gameState!=null)
-            chatApi.receiveNotice("[" + playerObj.id + "]" + playerObj.name + " was moved to " + teamObj.name + by(byPlayerObj));
+            chatApi.receiveNotice("[" + playerObj.id + "]" + playerObj.name + " was moved to " + teamNames[teamId] + by(byPlayerObj));
           updateGUI();
         },
         onAutoTeams: function (playerId1, teamId1, playerId2, teamId2, byId, customData) {
@@ -366,7 +367,7 @@ window.onload = ()=>{
       };
       socket.onmessage = (e)=>{
         var d = e.data, reader = new Reader(new DataView(d));
-        var type = reader.B();
+        var type = reader.readUint8();
         switch (type){
           case 0:{
             room.readStream(reader);
@@ -377,9 +378,9 @@ window.onload = ()=>{
           case 1:{
             if (room)
               return;
-            var clientId = reader.Ob();
+            var clientId = reader.readUint16();
             console.log("client id:", clientId);
-            onInit(pako.inflateRaw(new Uint8Array(d, reader.a)));
+            onInit(pako.inflateRaw(new Uint8Array(d, reader.offset)));
             break;
           }
           case 2:{

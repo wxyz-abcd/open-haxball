@@ -1,21 +1,4 @@
-const API = abcHaxballAPI({
-  setTimeout: window.setTimeout,
-  clearTimeout: window.clearTimeout,
-  setInterval: window.setInterval,
-  clearInterval: window.clearInterval,
-  console: window.console,
-  requestAnimationFrame: window.requestAnimationFrame,
-  cancelAnimationFrame: window.cancelAnimationFrame,
-  RTCPeerConnection: window.RTCPeerConnection, 
-  RTCIceCandidate: window.RTCIceCandidate, 
-  RTCSessionDescription: window.RTCSessionDescription, 
-  crypto: window.crypto,
-  WebSocket: window.WebSocket,
-  XMLHttpRequest: window.XMLHttpRequest,
-  performance: window.performance,
-  JSON5: window.JSON5,
-  pako: window.pako
-},{
+const API = abcHaxballAPI(window, {
   noVariableValueChangeEvent: true,
   /*
   backend: { // this is basro's current backend server
@@ -37,9 +20,9 @@ const API = abcHaxballAPI({
   },
   */
   backend: { // this is how i can use my backend server locally
-    hostname: "localhost:3000",
-    hostnameWs: "localhost:3000",
-    secure: false
+    hostname: window.location.host,
+    hostnameWs: window.location.host,
+    secure: window.location.protocol.indexOf("s")>0
   }
 }); // if you use our haxballOriginModifier extension, you don't need a proxy server. (But you still have to serve the files, you cannot open the html directly.)
 

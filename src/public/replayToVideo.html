@@ -102,50 +102,8 @@
       <canvas id="canvas"></canvas>
     </div>
     <script>
-      const API = abcHaxballAPI({
-        setTimeout: window.setTimeout,
-        clearTimeout: window.clearTimeout,
-        setInterval: window.setInterval,
-        clearInterval: window.clearInterval,
-        console: window.console,
-        requestAnimationFrame: window.requestAnimationFrame,
-        cancelAnimationFrame: window.cancelAnimationFrame,
-        RTCPeerConnection: window.RTCPeerConnection, 
-        RTCIceCandidate: window.RTCIceCandidate, 
-        RTCSessionDescription: window.RTCSessionDescription, 
-        crypto: window.crypto,
-        WebSocket: window.WebSocket,
-        XMLHttpRequest: window.XMLHttpRequest,
-        performance: window.performance,
-        JSON5: window.JSON5,
-        pako: window.pako
-      },{
-        noVariableValueChangeEvent: true,
-        noWebRTC: true,
-        /*
-        backend: { // this is basro's current backend server
-          hostname: "www.haxball.com",
-          hostnameWs: "p2p.haxball.com",
-          secure: true
-        },
-        proxy: { // this is my proxy server
-          WebSocketChangeOriginAllowed: false,
-          WebSocketUrl: "wss://node-haxball.glitch.me/",
-          HttpUrl: "https://node-haxball.glitch.me/rs/"
-        }
-        */
-        /*
-        proxy: { // this is how i can use my own proxy server locally
-          WebSocketChangeOriginAllowed: false,
-          WebSocketUrl: "ws://localhost:3000/",
-          HttpUrl: "http://localhost:3000/rs/"
-        },
-        */
-        backend: { // this is how i can use my backend server locally
-          hostname: "localhost:3000",
-          hostnameWs: "localhost:3000",
-          secure: false
-        }
+      const API = abcHaxballAPI(window,{
+        noVariableValueChangeEvent: true
       }); // if you use our haxballOriginModifier extension, you don't need a proxy server. (But you still have to serve the files, you cannot open the html directly.)
 
       function loadFile(file){
@@ -324,11 +282,6 @@
         });
         loadFile(file.files[0]).then((replayData)=>{
           var fid = checkNumber(roomPlayers.value, true);
-          renderers.forEach((renderer)=>{
-            renderer.room = {};
-            renderer.initialize();
-            renderer.followPlayerId = fid;
-          });
           /*canvas.width = params.cdw;
           canvas.height = params.cdh;*/
           canvas.style = "width: "+params.cws+"px; height: "+params.chs+"px;";
@@ -356,6 +309,11 @@
               capturer.capture(canvas);
               cfn.innerText = "Current Frame No: " + replayReader.getCurrentFrameNo() + " | FPS: " + currentRenderer.fps();
             }
+          });
+          renderers.forEach((renderer)=>{
+            renderer.room = replayReader;
+            renderer.initialize();
+            renderer.followPlayerId = fid;
           });
           replayReader.onEnd = ()=>{ // the end of replay data is reached.
             replayReader.destroy();
